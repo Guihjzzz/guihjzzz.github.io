@@ -81,18 +81,23 @@
   const params = new URLSearchParams(window.location.search);
   const requested = params.get("lang");
   const manualSelection = params.get("lang-selection") === "manual" && supported.includes(requested) ? requested : null;
-  let savedLanguage = null;
-  try {
-    const saved = localStorage.getItem("tutorial-language");
-    if (supported.includes(saved)) savedLanguage = saved;
-  } catch {}
-  const localeList = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || "pt"];
-  const detected = localeList.map(value => String(value).toLowerCase().split("-")[0]).find(value => supported.includes(value));
-  const pageLanguage = manualSelection
-    || (supported.includes(requested) && requested !== "pt" ? requested : null)
-    || savedLanguage
-    || detected
-    || "pt";
+  const explicitLanguage = supported.includes(requested) && requested !== "pt" ? requested : null;
+  const hasExplicitLanguage = Boolean(manualSelection || explicitLanguage);
+
+  function detectBrowserLanguage() {
+    const locales = [
+      ...(Array.isArray(navigator.languages) ? navigator.languages : []),
+      navigator.language
+    ].filter(Boolean);
+
+    for (const locale of locales) {
+      const language = String(locale).trim().replace(/_/g, "-").toLowerCase().split("-")[0];
+      if (supported.includes(language)) return language;
+    }
+    return null;
+  }
+
+  let pageLanguage = manualSelection || explicitLanguage || detectBrowserLanguage() || "pt";
 
   const dialog = document.getElementById("language-dialog");
   const options = document.getElementById("language-options");
@@ -204,9 +209,6 @@
       link.href = target.toString();
       link.lang = languageTags[language];
       link.setAttribute("aria-label", languageNames[language]);
-      link.addEventListener("click", () => {
-        try { localStorage.setItem("tutorial-language", language); } catch {}
-      });
       if (language === pageLanguage) link.setAttribute("aria-current", "page");
 
       const flag = document.createElement("img");
@@ -249,6 +251,15 @@
   siteLanguageDialog.addEventListener("close", () => translateButton.setAttribute("aria-expanded", "false"));
   siteLanguageDialog.addEventListener("click", event => {
     if (event.target === siteLanguageDialog) siteLanguageDialog.close();
+  });
+
+  window.addEventListener("languagechange", () => {
+    if (hasExplicitLanguage) return;
+    const nextLanguage = detectBrowserLanguage() || "pt";
+    if (nextLanguage === pageLanguage) return;
+    pageLanguage = nextLanguage;
+    renderPage(pageLanguage);
+    applyTheme(document.documentElement.dataset.theme === "dark" ? "dark" : "light", false);
   });
 
   renderPage(pageLanguage);
